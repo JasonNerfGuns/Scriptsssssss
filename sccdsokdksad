@@ -1,0 +1,479 @@
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+
+local isDraggingFrame = false
+local dragOffset
+local isSafePlateToggled = false -- Track SafePlate toggle state
+
+-- Create the GUI (We'll make this in a function so it can be properly set up once)
+local function setupGUI()
+    -- Check if GUI already exists to prevent duplicates
+    if player.PlayerGui:FindFirstChild("SwordTeleportGUI") then
+        return player.PlayerGui.SwordTeleportGUI
+    end
+    
+    local screenGui = Instance.new("ScreenGui")
+    screenGui.Name = "SwordTeleportGUI"
+    screenGui.ResetOnSpawn = false -- This makes it persist after death
+    screenGui.Parent = player.PlayerGui
+    
+    -- Main frame with rounded corners and shadow
+    local mainFrame = Instance.new("Frame")
+    mainFrame.Size = UDim2.new(0, 300, 0, 400) -- Reduced height to 400
+    mainFrame.Position = UDim2.new(0.5, -150, 0.2, 0)
+    mainFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 48)
+    mainFrame.BorderSizePixel = 0
+    mainFrame.Parent = screenGui
+    
+    -- Add corner radius
+    local uiCorner = Instance.new("UICorner")
+    uiCorner.CornerRadius = UDim.new(0, 10)
+    uiCorner.Parent = mainFrame
+    
+    -- Add shadow
+    local shadow = Instance.new("ImageLabel")
+    shadow.Size = UDim2.new(1, 20, 1, 20)
+    shadow.Position = UDim2.new(0, -10, 0, -10)
+    shadow.BackgroundTransparency = 1
+    shadow.Image = "rbxassetid://6015897843"
+    shadow.ImageColor3 = Color3.new(0, 0, 0)
+    shadow.ImageTransparency = 0.6
+    shadow.ScaleType = Enum.ScaleType.Slice
+    shadow.SliceCenter = Rect.new(49, 49, 450, 450)
+    shadow.ZIndex = -1
+    shadow.Parent = mainFrame
+    
+    -- Title
+    local titleLabel = Instance.new("TextLabel")
+    titleLabel.Size = UDim2.new(1, 0, 0, 40)
+    titleLabel.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+    titleLabel.Text = "Sword Stand Teleporter"
+    titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+    titleLabel.TextSize = 18
+    titleLabel.Font = Enum.Font.GothamBold
+    titleLabel.BorderSizePixel = 0
+    titleLabel.Parent = mainFrame
+    
+    -- Add corner radius to title
+    local titleCorner = Instance.new("UICorner")
+    titleCorner.CornerRadius = UDim.new(0, 10)
+    titleCorner.Parent = titleLabel
+    
+    -- Create ScrollingFrame for buttons
+    local scrollingFrame = Instance.new("ScrollingFrame")
+    scrollingFrame.Size = UDim2.new(1, 0, 1, -40) -- Full width, height minus title
+    scrollingFrame.Position = UDim2.new(0, 0, 0, 40) -- Below title
+    scrollingFrame.BackgroundTransparency = 1
+    scrollingFrame.ScrollBarThickness = 6
+    scrollingFrame.Parent = mainFrame
+    
+    -- Create UIListLayout for buttons
+    local listLayout = Instance.new("UIListLayout")
+    listLayout.Padding = UDim.new(0, 5) -- Reduced padding between buttons
+    listLayout.Parent = scrollingFrame
+    
+    -- Function to create and add button to scrolling frame
+    local function createButton(name, color, position)
+        local button = Instance.new("TextButton")
+        button.Size = UDim2.new(0.9, 0, 0, 30) -- Reduced height to 30
+        button.Position = UDim2.new(0.05, 0, 0, 0) -- Position will be handled by UIListLayout
+        button.BackgroundColor3 = color
+        button.Text = name
+        button.TextColor3 = Color3.fromRGB(255, 255, 255)
+        button.TextSize = 14 -- Reduced text size
+        button.Font = Enum.Font.GothamBold
+        button.BorderSizePixel = 0
+        button.Parent = scrollingFrame
+        
+        -- Add corner radius
+        local buttonCorner = Instance.new("UICorner")
+        buttonCorner.CornerRadius = UDim.new(0, 6)
+        buttonCorner.Parent = button
+        
+        return button
+    end
+    
+    -- Create buttons with reduced spacing
+    local teleportButton = createButton("Teleport to SafePlate", Color3.fromRGB(230, 73, 128))
+    local darkheartButton = createButton("Bring Darkheart Stand", Color3.fromRGB(128, 0, 128))
+    local skyDaggerButton = createButton("Bring SkyDagger Stand", Color3.fromRGB(0, 170, 255))
+    local venomshankButton = createButton("Bring Venomshank Stand", Color3.fromRGB(50, 205, 50))
+    local windforceButton = createButton("Bring Windforce Stand", Color3.fromRGB(255, 165, 0))
+    local medkitButton = createButton("Bring MedKit Stand", Color3.fromRGB(255, 50, 50))
+    local shieldSphereButton = createButton("Bring ShieldSphere Stand", Color3.fromRGB(255, 215, 0))
+    local firebrandButton = createButton("Bring Firebrand Stand", Color3.fromRGB(255, 69, 0))
+    local hyacinthButton = createButton("Bring Hyacinth Stand", Color3.fromRGB(147, 112, 219))
+    local iceDaggerButton = createButton("Bring IceDagger Stand", Color3.fromRGB(135, 206, 235))
+    local illuminaButton = createButton("Bring Illumina Stand", Color3.fromRGB(255, 255, 0))
+    local splitterButton = createButton("Bring Splitter Stand", Color3.fromRGB(128, 128, 128))
+    local ghostwalkerButton = createButton("Bring Ghostwalker Stand", Color3.fromRGB(169, 169, 169))
+    local randomSpawnButton = createButton("Random Spawn Teleport", Color3.fromRGB(75, 150, 200))
+    
+    -- Close button
+    local closeButton = Instance.new("TextButton")
+    closeButton.Size = UDim2.new(0, 30, 0, 30)
+    closeButton.Position = UDim2.new(1, -35, 0, 5)
+    closeButton.BackgroundColor3 = Color3.fromRGB(255, 50, 50)
+    closeButton.Text = "X"
+    closeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    closeButton.TextSize = 16
+    closeButton.Font = Enum.Font.GothamBold
+    closeButton.BorderSizePixel = 0
+    closeButton.Parent = mainFrame
+    
+    -- Close button corner
+    local closeCorner = Instance.new("UICorner")
+    closeCorner.CornerRadius = UDim.new(0, 8)
+    closeCorner.Parent = closeButton
+    
+    -- Minimize button
+    local minimizeButton = Instance.new("TextButton")
+    minimizeButton.Size = UDim2.new(0, 30, 0, 30)
+    minimizeButton.Position = UDim2.new(1, -70, 0, 5)
+    minimizeButton.BackgroundColor3 = Color3.fromRGB(255, 165, 0)
+    minimizeButton.Text = "-"
+    minimizeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+    minimizeButton.TextSize = 16
+    minimizeButton.Font = Enum.Font.GothamBold
+    minimizeButton.BorderSizePixel = 0
+    minimizeButton.Parent = mainFrame
+    
+    -- Minimize button corner
+    local minimizeCorner = Instance.new("UICorner")
+    minimizeCorner.CornerRadius = UDim.new(0, 8)
+    minimizeCorner.Parent = minimizeButton
+    
+    -- Status message
+    local statusMessage = Instance.new("TextLabel")
+    statusMessage.Size = UDim2.new(0.9, 0, 0, 20)
+    statusMessage.Position = UDim2.new(0.05, 0, 0.95, 0)
+    statusMessage.BackgroundTransparency = 1
+    statusMessage.Text = ""
+    statusMessage.TextColor3 = Color3.fromRGB(255, 255, 255)
+    statusMessage.TextSize = 14
+    statusMessage.Font = Enum.Font.Gotham
+    statusMessage.Parent = mainFrame
+    
+    -- Function to update status message with fade
+    local function updateStatus(text, color)
+        statusMessage.Text = text
+        statusMessage.TextColor3 = color or Color3.fromRGB(0, 255, 100)
+        statusMessage.TextTransparency = 0
+        
+        -- Fade out the status message after 2 seconds
+        delay(2, function()
+            for i = 0, 1, 0.1 do
+                if statusMessage and statusMessage.Parent then
+                    statusMessage.TextTransparency = i
+                    wait(0.05)
+                end
+            end
+            if statusMessage and statusMessage.Parent then
+                statusMessage.Text = ""
+                statusMessage.TextTransparency = 0
+            end
+        end)
+    end
+    
+    -- Function to teleport to SafePlate
+    local function teleportToSafePlate()
+        local safePlate = workspace:FindFirstChild("SafePlate")
+        local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+        
+        if safePlate and humanoidRootPart then
+            -- Create a tween for smooth teleportation
+            local destination = safePlate.CFrame + Vector3.new(0, 5, 0) -- Teleport slightly above to avoid getting stuck
+            local teleportTween = TweenService:Create(
+                humanoidRootPart,
+                TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                {CFrame = destination}
+            )
+            teleportTween:Play()
+            
+            updateStatus("Teleported to SafePlate")
+        else
+            updateStatus("Error: SafePlate or character not found!", Color3.fromRGB(255, 50, 50))
+        end
+    end
+    
+    -- NEW: Function to teleport to a random spawn
+    local function teleportToRandomSpawn()
+        local spawnsFolder = workspace:FindFirstChild("Spawns")
+        local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+        
+        if not humanoidRootPart then
+            updateStatus("Error: Character not found!", Color3.fromRGB(255, 50, 50))
+            return
+        end
+        
+        if not spawnsFolder then
+            updateStatus("Error: Spawns folder not found!", Color3.fromRGB(255, 50, 50))
+            return
+        end
+        
+        -- Collect all spawn points
+        local spawnPoints = {}
+        for _, spawn in pairs(spawnsFolder:GetChildren()) do
+            if spawn:IsA("BasePart") then
+                table.insert(spawnPoints, spawn)
+            end
+        end
+        
+        if #spawnPoints == 0 then
+            updateStatus("Error: No spawn points found!", Color3.fromRGB(255, 50, 50))
+            return
+        end
+        
+        -- Select random spawn point
+        local randomSpawn = spawnPoints[math.random(1, #spawnPoints)]
+        
+        -- Create a tween for smooth teleportation
+        local destination = randomSpawn.CFrame + Vector3.new(0, 3, 0) -- Teleport slightly above
+        local teleportTween = TweenService:Create(
+            humanoidRootPart,
+            TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+            {CFrame = destination}
+        )
+        teleportTween:Play()
+        
+        updateStatus("Teleported to random spawn: " .. randomSpawn.Name)
+    end
+    
+    -- Function to bring an object to player using CFrame (client-sided)
+    local function bringObjectWithCFrame(objectName, parentPath)
+        local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+        
+        if not humanoidRootPart then
+            updateStatus("Error: Character not found!", Color3.fromRGB(255, 50, 50))
+            return
+        end
+        
+        -- Try to find the object using the specified path
+        local object = nil
+        
+        if parentPath then
+            local parent = workspace
+            for _, pathPart in ipairs(parentPath) do
+                if parent then
+                    parent = parent:FindFirstChild(pathPart)
+                end
+            end
+            
+            if parent then
+                object = parent:FindFirstChild(objectName)
+            end
+        else
+            -- Try to find the object in workspace or in the Swords folder
+            object = workspace:FindFirstChild(objectName)
+            if not object and workspace:FindFirstChild("Swords") then
+                object = workspace.Swords:FindFirstChild(objectName)
+            end
+        end
+        
+        if not object then
+            updateStatus("Error: " .. objectName .. " not found!", Color3.fromRGB(255, 50, 50))
+            return
+        end
+        
+        -- Store the original CFrame
+        local originalCFrames = {}
+        
+        -- Store all descendants that are BaseParts
+        for _, part in pairs(object:GetDescendants()) do
+            if part:IsA("BasePart") then
+                originalCFrames[part] = part.CFrame
+            end
+        end
+        
+        -- If it's a model, also store the primary part if it exists
+        if object:IsA("Model") and object.PrimaryPart then
+            originalCFrames["primaryPart"] = object.PrimaryPart.CFrame
+        end
+        
+        -- Position in front of the player
+        local playerPosition = humanoidRootPart.Position + humanoidRootPart.CFrame.lookVector * 5
+        local playerCFrame = CFrame.new(playerPosition, humanoidRootPart.Position)
+        
+        -- Move the object to the player
+        if object:IsA("Model") and object.PrimaryPart then
+            -- Calculate the offset from the current position to keep the orientation
+            local offset = object.PrimaryPart.CFrame:ToObjectSpace(CFrame.new(object.PrimaryPart.Position))
+            object:SetPrimaryPartCFrame(playerCFrame * offset)
+        elseif object:IsA("BasePart") then
+            -- For a single part
+            object.CFrame = playerCFrame
+        else
+            -- For models without a primary part, move individual parts
+            local foundAnyPart = false
+            for _, part in pairs(object:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    if not foundAnyPart then
+                        -- Use the first part as reference for positioning
+                        local centerPos = part.Position
+                        local offset = part.CFrame:ToObjectSpace(CFrame.new(centerPos))
+                        part.CFrame = playerCFrame * offset
+                        foundAnyPart = true
+                    else
+                        -- Keep relative positions for other parts
+                        part.CFrame = playerCFrame * part.CFrame:ToObjectSpace(CFrame.new(part.Position))
+                    end
+                end
+            end
+            
+            if not foundAnyPart then
+                updateStatus("Error: No parts found in " .. objectName, Color3.fromRGB(255, 50, 50))
+                return
+            end
+        end
+        
+        updateStatus(objectName .. " brought to you (Client-Sided)")
+        
+        -- Restore original position after 10 seconds
+        delay(10, function()
+            -- Restore all parts to original positions
+            for part, originalCFrame in pairs(originalCFrames) do
+                if part == "primaryPart" and object:IsA("Model") and object.PrimaryPart then
+                    object:SetPrimaryPartCFrame(originalCFrame)
+                elseif typeof(part) == "Instance" and part:IsA("BasePart") and part.Parent then
+                    part.CFrame = originalCFrame
+                end
+            end
+            
+            updateStatus(objectName .. " returned to original position")
+        end)
+    end
+    
+    -- Button click events
+    teleportButton.MouseButton1Click:Connect(teleportToSafePlate)
+    darkheartButton.MouseButton1Click:Connect(function() bringObjectWithCFrame("DarkheartStand") end)
+    skyDaggerButton.MouseButton1Click:Connect(function() bringObjectWithCFrame("SkyDaggerStand") end)
+    venomshankButton.MouseButton1Click:Connect(function() bringObjectWithCFrame("VenomshankStand") end)
+    windforceButton.MouseButton1Click:Connect(function() bringObjectWithCFrame("WindforceStand") end)
+    medkitButton.MouseButton1Click:Connect(function() bringObjectWithCFrame("MedKitStand", {"Powerups"}) end)
+    shieldSphereButton.MouseButton1Click:Connect(function() bringObjectWithCFrame("ShieldSphereStand", {"Powerups"}) end)
+    firebrandButton.MouseButton1Click:Connect(function() bringObjectWithCFrame("FirebrandStand", {"Swords"}) end)
+    hyacinthButton.MouseButton1Click:Connect(function() bringObjectWithCFrame("HyacinthStand", {"Swords"}) end)
+    iceDaggerButton.MouseButton1Click:Connect(function() bringObjectWithCFrame("IceDaggerStand", {"Swords"}) end)
+    illuminaButton.MouseButton1Click:Connect(function() bringObjectWithCFrame("IlluminaStand", {"Swords"}) end)
+    splitterButton.MouseButton1Click:Connect(function() bringObjectWithCFrame("SplitterStand", {"Swords"}) end)
+    ghostwalkerButton.MouseButton1Click:Connect(function() bringObjectWithCFrame("GhostwalkerStand", {"Swords"}) end)
+    randomSpawnButton.MouseButton1Click:Connect(teleportToRandomSpawn)
+    
+    -- Close button click event
+    closeButton.MouseButton1Click:Connect(function()
+        screenGui:Destroy()
+    end)
+    
+    -- Minimize button click event
+    local isMinimized = false
+    minimizeButton.MouseButton1Click:Connect(function()
+        isMinimized = not isMinimized
+        if isMinimized then
+            mainFrame.Size = UDim2.new(0, 300, 0, 40)
+            minimizeButton.Text = "+"
+        else
+            mainFrame.Size = UDim2.new(0, 300, 0, 400)
+            minimizeButton.Text = "-"
+        end
+    end)
+    
+    -- Button hover effects
+    local function createButtonEffect(button, originalColor)
+        button.MouseEnter:Connect(function()
+            local hoverTween = TweenService:Create(
+                button,
+                TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                {BackgroundColor3 = originalColor:Lerp(Color3.fromRGB(255, 255, 255), 0.2)}
+            )
+            hoverTween:Play()
+        end)
+        
+        button.MouseLeave:Connect(function()
+            local leaveTween = TweenService:Create(
+                button,
+                TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                {BackgroundColor3 = originalColor}
+            )
+            leaveTween:Play()
+        end)
+        
+        button.MouseButton1Down:Connect(function()
+            local downTween = TweenService:Create(
+                button,
+                TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                {BackgroundColor3 = originalColor:Lerp(Color3.fromRGB(0, 0, 0), 0.2)}
+            )
+            downTween:Play()
+        end)
+        
+        button.MouseButton1Up:Connect(function()
+            local upTween = TweenService:Create(
+                button,
+                TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                {BackgroundColor3 = originalColor}
+            )
+            upTween:Play()
+        end)
+    end
+    
+    createButtonEffect(teleportButton, Color3.fromRGB(230, 73, 128))
+    createButtonEffect(darkheartButton, Color3.fromRGB(128, 0, 128))
+    createButtonEffect(skyDaggerButton, Color3.fromRGB(0, 170, 255))
+    createButtonEffect(venomshankButton, Color3.fromRGB(50, 205, 50))
+    createButtonEffect(windforceButton, Color3.fromRGB(255, 165, 0))
+    createButtonEffect(medkitButton, Color3.fromRGB(255, 50, 50))
+    createButtonEffect(shieldSphereButton, Color3.fromRGB(255, 215, 0))
+    createButtonEffect(firebrandButton, Color3.fromRGB(255, 69, 0))
+    createButtonEffect(hyacinthButton, Color3.fromRGB(147, 112, 219))
+    createButtonEffect(iceDaggerButton, Color3.fromRGB(135, 206, 235))
+    createButtonEffect(illuminaButton, Color3.fromRGB(255, 255, 0))
+    createButtonEffect(splitterButton, Color3.fromRGB(128, 128, 128))
+    createButtonEffect(ghostwalkerButton, Color3.fromRGB(169, 169, 169))
+    createButtonEffect(randomSpawnButton, Color3.fromRGB(75, 150, 200))
+    createButtonEffect(closeButton, Color3.fromRGB(255, 50, 50))
+    createButtonEffect(minimizeButton, Color3.fromRGB(255, 165, 0))
+    
+    -- Make the GUI draggable
+    titleLabel.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isDraggingFrame = true
+            dragOffset = mainFrame.Position - UDim2.new(0, input.Position.X, 0, input.Position.Y)
+        end
+    end)
+    
+    titleLabel.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            isDraggingFrame = false
+        end
+    end)
+    
+    titleLabel.InputChanged:Connect(function(input)
+        if isDraggingFrame and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            mainFrame.Position = UDim2.new(0, input.Position.X, 0, input.Position.Y) + dragOffset
+        end
+    end)
+    
+    return screenGui
+end
+
+-- Handle persistence across deaths
+local gui = setupGUI()
+
+-- Initialize character handling
+local function onCharacterAdded(newCharacter)
+    character = newCharacter
+    -- Wait for the character to fully load
+    newCharacter:WaitForChild("Humanoid")
+end
+
+-- Listen for when the player gets a new character (respawns)
+player.CharacterAdded:Connect(onCharacterAdded)
+
+-- Handle the initial character if there is one
+if character then
+    onCharacterAdded(character)
+end
