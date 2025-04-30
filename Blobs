@@ -1,0 +1,558 @@
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local player = Players.LocalPlayer
+local blobsFolder = workspace:FindFirstChild("Blobs")
+
+-- Variables to control functionality
+local isTeleportingFood = true
+local selectedPlayerName = nil
+local defaultWalkSpeed = 16 -- Default Roblox walkspeed
+local colorScheme = {
+    background = Color3.fromRGB(45, 45, 45),
+    header = Color3.fromRGB(35, 35, 35),
+    button = Color3.fromRGB(59, 130, 246), -- Blue
+    buttonHover = Color3.fromRGB(29, 78, 216), -- Darker blue
+    buttonText = Color3.fromRGB(255, 255, 255),
+    text = Color3.fromRGB(255, 255, 255),
+    scrollBackground = Color3.fromRGB(30, 30, 30),
+    playerButton = Color3.fromRGB(55, 55, 55),
+    playerButtonSelected = Color3.fromRGB(76, 175, 80), -- Green
+    success = Color3.fromRGB(76, 175, 80), -- Green
+    error = Color3.fromRGB(220, 53, 69), -- Red
+    slider = Color3.fromRGB(59, 130, 246), -- Blue
+    sliderBackground = Color3.fromRGB(80, 80, 80),
+}
+
+-- Function to teleport all "Food" parts from Blobs to player continuously
+local function loopTeleportFoodParts()
+    while true do
+        if isTeleportingFood then
+            pcall(function() -- Use pcall to prevent script errors from stopping the loop
+                if blobsFolder and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                    local playerPosition = player.Character.HumanoidRootPart.CFrame
+                    
+                    for _, blobModel in ipairs(blobsFolder:GetChildren()) do
+                        for _, foodPart in ipairs(blobModel:GetChildren()) do
+                            if foodPart:IsA("BasePart") and foodPart.Name == "Food" then
+                                foodPart.CFrame = playerPosition + Vector3.new(math.random(-5, 5), 0, math.random(-5, 5))
+
+                                -- Activate TouchInterest inside the part
+                                local touchInterest = foodPart:FindFirstChildOfClass("TouchTransmitter")
+                                if not touchInterest then
+                                    touchInterest = Instance.new("TouchTransmitter")
+                                    touchInterest.Parent = foodPart
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        end
+        wait(0.5) -- Teleport every half second for better response
+    end
+end
+
+-- Function to teleport a selected player to you
+local function teleportPlayer(targetPlayer)
+    if targetPlayer and targetPlayer.Character and targetPlayer.Character:FindFirstChild("HumanoidRootPart") and 
+       player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        local targetPosition = player.Character.HumanoidRootPart.CFrame + Vector3.new(0, 3, 0) -- Slightly above player
+        targetPlayer.Character.HumanoidRootPart.CFrame = targetPosition
+        return true
+    else
+        return false
+    end
+end
+
+-- Function to teleport all players to you
+local function teleportAllPlayers()
+    local successCount = 0
+    local failCount = 0
+    
+    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        for _, targetPlayer in pairs(Players:GetPlayers()) do
+            if targetPlayer ~= player then -- Don't teleport yourself
+                local success = teleportPlayer(targetPlayer)
+                if success then
+                    successCount = successCount + 1
+                else
+                    failCount = failCount + 1
+                end
+            end
+        end
+        return successCount, failCount
+    else
+        return 0, #Players:GetPlayers() - 1
+    end
+end
+
+-- Function to set player's walkspeed
+local function setWalkSpeed(speed)
+    local success = false
+    pcall(function()
+        if player.Character and player.Character:FindFirstChild("Humanoid") then
+            player.Character.Humanoid.WalkSpeed = speed
+            success = true
+        end
+    end)
+    return success
+end
+
+-- Function to create rounded corners for UI elements
+local function roundify(guiObject)
+    local UICorner = Instance.new("UICorner")
+    UICorner.CornerRadius = UDim.new(0, 8)
+    UICorner.Parent = guiObject
+    return guiObject
+end
+
+-- Function to create a drop shadow effect
+local function addShadow(guiObject, shadowSize)
+    local shadow = Instance.new("ImageLabel")
+    shadow.AnchorPoint = Vector2.new(0.5, 0.5)
+    shadow.BackgroundTransparency = 1
+    shadow.Image = "rbxassetid://1316045217" -- Shadow image
+    shadow.ImageColor3 = Color3.fromRGB(0, 0, 0)
+    shadow.ImageTransparency = 0.7
+    shadow.Position = UDim2.fromScale(0.5, 0.5)
+    shadow.Size = UDim2.new(1, shadowSize, 1, shadowSize)
+    shadow.ZIndex = guiObject.ZIndex - 1
+    shadow.Parent = guiObject
+    return shadow
+end
+
+-- Function to create a button with hover effect
+local function createStyledButton(parent, position, size, text)
+    local button = Instance.new("TextButton")
+    button.Size = size
+    button.Position = position
+    button.Text = text
+    button.BackgroundColor3 = colorScheme.button
+    button.TextColor3 = colorScheme.buttonText
+    button.Font = Enum.Font.GothamSemibold
+    button.TextSize = 14
+    button.Parent = parent
+    
+    roundify(button)
+    
+    -- Create hover effects
+    button.MouseEnter:Connect(function()
+        TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = colorScheme.buttonHover}):Play()
+    end)
+    
+    button.MouseLeave:Connect(function()
+        TweenService:Create(button, TweenInfo.new(0.2), {BackgroundColor3 = colorScheme.button}):Play()
+    end)
+    
+    return button
+end
+
+-- Create stylish status message
+local function showStatusMessage(parent, message, isSuccess)
+    local statusFrame = parent:FindFirstChild("StatusFrame")
+    if not statusFrame then
+        statusFrame = Instance.new("Frame")
+        statusFrame.Name = "StatusFrame"
+        statusFrame.Size = UDim2.new(0.9, 0, 0.08, 0)
+        statusFrame.Position = UDim2.new(0.05, 0, 0.9, 0)
+        statusFrame.BackgroundColor3 = colorScheme.background
+        statusFrame.BackgroundTransparency = 0.5
+        statusFrame.Parent = parent
+        roundify(statusFrame)
+        
+        local statusText = Instance.new("TextLabel")
+        statusText.Name = "StatusText"
+        statusText.Size = UDim2.new(1, 0, 1, 0)
+        statusText.BackgroundTransparency = 1
+        statusText.TextColor3 = colorScheme.text
+        statusText.Font = Enum.Font.GothamSemibold
+        statusText.TextSize = 14
+        statusText.Parent = statusFrame
+    end
+    
+    local statusText = statusFrame.StatusText
+    statusText.Text = message
+    statusText.TextColor3 = isSuccess and colorScheme.success or colorScheme.error
+    
+    -- Make it fade in and out
+    statusFrame.BackgroundTransparency = 0.5
+    statusText.TextTransparency = 0
+    
+    spawn(function()
+        wait(2)
+        TweenService:Create(statusFrame, TweenInfo.new(1), {BackgroundTransparency = 1}):Play()
+        TweenService:Create(statusText, TweenInfo.new(1), {TextTransparency = 1}):Play()
+    end)
+end
+
+-- Function to create a styled text input
+local function createStyledTextInput(parent, position, size, placeholderText)
+    local textBox = Instance.new("TextBox")
+    textBox.Size = size
+    textBox.Position = position
+    textBox.PlaceholderText = placeholderText
+    textBox.Text = ""
+    textBox.BackgroundColor3 = colorScheme.scrollBackground
+    textBox.TextColor3 = colorScheme.text
+    textBox.PlaceholderColor3 = Color3.fromRGB(180, 180, 180)
+    textBox.Font = Enum.Font.GothamSemibold
+    textBox.TextSize = 14
+    textBox.ClearTextOnFocus = false
+    textBox.Parent = parent
+    
+    roundify(textBox)
+    return textBox
+end
+
+-- GUI SETUP --
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "UltraGamerGUI"
+screenGui.ResetOnSpawn = false -- Prevents GUI from disappearing after death
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 400, 0, 520) -- Increased height for new button
+mainFrame.Position = UDim2.new(0.5, -200, 0.5, -260)
+mainFrame.BackgroundColor3 = colorScheme.background
+mainFrame.Active = true -- Enable dragging
+mainFrame.Draggable = true -- Make GUI draggable
+mainFrame.Parent = screenGui
+roundify(mainFrame)
+addShadow(mainFrame, 15)
+
+-- Create header
+local header = Instance.new("Frame")
+header.Name = "Header"
+header.Size = UDim2.new(1, 0, 0.1, 0)
+header.BackgroundColor3 = colorScheme.header
+header.Parent = mainFrame
+
+local headerCorner = Instance.new("UICorner")
+headerCorner.CornerRadius = UDim.new(0, 8)
+headerCorner.Parent = header
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(0.7, 0, 1, 0)
+titleLabel.Position = UDim2.new(0.05, 0, 0, 0)
+titleLabel.Text = "Ultra Gamer GUI"
+titleLabel.TextColor3 = colorScheme.text
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextSize = 18
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.BackgroundTransparency = 1
+titleLabel.Parent = header
+
+-- Close button
+local closeButton = Instance.new("TextButton")
+closeButton.Size = UDim2.new(0.08, 0, 0.8, 0)
+closeButton.Position = UDim2.new(0.9, 0, 0.1, 0)
+closeButton.Text = "X"
+closeButton.TextColor3 = colorScheme.text
+closeButton.Font = Enum.Font.GothamBold
+closeButton.TextSize = 18
+closeButton.BackgroundColor3 = Color3.fromRGB(220, 53, 69) -- Red
+closeButton.Parent = header
+roundify(closeButton)
+
+closeButton.MouseButton1Click:Connect(function()
+    screenGui:Destroy()
+    isTeleportingFood = false -- Stop the food teleportation loop
+end)
+
+-- WALKSPEED SECTION --
+local wsSection = Instance.new("Frame")
+wsSection.Name = "WSSection"
+wsSection.Size = UDim2.new(0.9, 0, 0.12, 0)
+wsSection.Position = UDim2.new(0.05, 0, 0.12, 0)
+wsSection.BackgroundColor3 = colorScheme.scrollBackground
+wsSection.Parent = mainFrame
+roundify(wsSection)
+
+local wsLabel = Instance.new("TextLabel")
+wsLabel.Size = UDim2.new(0.25, 0, 1, 0)
+wsLabel.BackgroundTransparency = 1
+wsLabel.Text = "WalkSpeed"
+wsLabel.TextColor3 = colorScheme.text
+wsLabel.Font = Enum.Font.GothamSemibold
+wsLabel.TextSize = 16
+wsLabel.Position = UDim2.new(0.05, 0, 0, 0)
+wsLabel.Parent = wsSection
+
+-- Input for WalkSpeed
+local wsInput = createStyledTextInput(wsSection, UDim2.new(0.35, 0, 0.2, 0), UDim2.new(0.2, 0, 0.6, 0), "16")
+wsInput.Text = tostring(defaultWalkSpeed)
+
+-- Apply button for WalkSpeed
+local applyWsButton = createStyledButton(wsSection, UDim2.new(0.6, 0, 0.2, 0), UDim2.new(0.15, 0, 0.6, 0), "Apply")
+
+-- Current WS display
+local currentWsLabel = Instance.new("TextLabel")
+currentWsLabel.Size = UDim2.new(0.15, 0, 0.6, 0)
+currentWsLabel.Position = UDim2.new(0.8, 0, 0.2, 0)
+currentWsLabel.Text = tostring(defaultWalkSpeed)
+currentWsLabel.TextColor3 = colorScheme.success
+currentWsLabel.Font = Enum.Font.GothamSemibold
+currentWsLabel.TextSize = 16
+currentWsLabel.BackgroundColor3 = colorScheme.scrollBackground
+currentWsLabel.Parent = wsSection
+roundify(currentWsLabel)
+
+-- WalkSpeed logic
+applyWsButton.MouseButton1Click:Connect(function()
+    local speedText = wsInput.Text
+    local speed = tonumber(speedText)
+    
+    if speed then
+        -- Apply the walkspeed directly without using the function
+        pcall(function()
+            if player.Character and player.Character:FindFirstChild("Humanoid") then
+                player.Character.Humanoid.WalkSpeed = speed
+                currentWsLabel.Text = tostring(speed)
+                showStatusMessage(mainFrame, "WalkSpeed set to " .. speed, true)
+            else
+                showStatusMessage(mainFrame, "Character not found", false)
+            end
+        end)
+    else
+        showStatusMessage(mainFrame, "Please enter a valid number", false)
+    end
+end)
+
+-- Update walkspeed when text changes
+wsInput.FocusLost:Connect(function(enterPressed)
+    if enterPressed then
+        local speedText = wsInput.Text
+        local speed = tonumber(speedText)
+        
+        if speed then
+            -- Apply the walkspeed directly without using the function
+            pcall(function()
+                if player.Character and player.Character:FindFirstChild("Humanoid") then
+                    player.Character.Humanoid.WalkSpeed = speed
+                    currentWsLabel.Text = tostring(speed)
+                    showStatusMessage(mainFrame, "WalkSpeed set to " .. speed, true)
+                else
+                    showStatusMessage(mainFrame, "Character not found", false)
+                end
+            end)
+        else
+            showStatusMessage(mainFrame, "Please enter a valid number", false)
+        end
+    end
+end)
+
+-- Function to update WS display continuously
+local function updateWsDisplay()
+    while wait(0.5) do
+        pcall(function()
+            if player.Character and player.Character:FindFirstChild("Humanoid") then
+                local currentSpeed = player.Character.Humanoid.WalkSpeed
+                currentWsLabel.Text = tostring(math.floor(currentSpeed))
+                
+                -- If the walkspeed seems to have been reset by the game, try to reapply it
+                local desiredSpeed = tonumber(wsInput.Text)
+                if desiredSpeed and math.abs(currentSpeed - desiredSpeed) > 0.5 then
+                    player.Character.Humanoid.WalkSpeed = desiredSpeed
+                end
+            end
+        end)
+    end
+end
+
+-- FOOD TELEPORT SECTION --
+local foodSection = Instance.new("Frame")
+foodSection.Name = "FoodSection"
+foodSection.Size = UDim2.new(0.9, 0, 0.12, 0)
+foodSection.Position = UDim2.new(0.05, 0, 0.26, 0)
+foodSection.BackgroundColor3 = colorScheme.scrollBackground
+foodSection.Parent = mainFrame
+roundify(foodSection)
+
+local foodLabel = Instance.new("TextLabel")
+foodLabel.Size = UDim2.new(0.7, 0, 1, 0)
+foodLabel.BackgroundTransparency = 1
+foodLabel.Text = "Auto Teleport Blobs"
+foodLabel.TextColor3 = colorScheme.text
+foodLabel.Font = Enum.Font.GothamSemibold
+foodLabel.TextSize = 16
+foodLabel.TextXAlignment = Enum.TextXAlignment.Left
+foodLabel.Position = UDim2.new(0.05, 0, 0, 0)
+foodLabel.Parent = foodSection
+
+local toggleButton = createStyledButton(foodSection, UDim2.new(0.75, 0, 0.2, 0), UDim2.new(0.2, 0, 0.6, 0), "ON")
+toggleButton.BackgroundColor3 = colorScheme.success
+
+toggleButton.MouseButton1Click:Connect(function()
+    isTeleportingFood = not isTeleportingFood
+    toggleButton.Text = isTeleportingFood and "ON" or "OFF"
+    toggleButton.BackgroundColor3 = isTeleportingFood and colorScheme.success or colorScheme.error
+    showStatusMessage(mainFrame, "Blob teleporting " .. (isTeleportingFood and "enabled" or "disabled"), isTeleportingFood)
+end)
+
+-- PLAYER TELEPORT SECTION --
+local playerSection = Instance.new("Frame")
+playerSection.Name = "PlayerSection"
+playerSection.Size = UDim2.new(0.9, 0, 0.4, 0) -- Adjusted height
+playerSection.Position = UDim2.new(0.05, 0, 0.4, 0)
+playerSection.BackgroundColor3 = colorScheme.scrollBackground
+playerSection.Parent = mainFrame
+roundify(playerSection)
+
+local playerListLabel = Instance.new("TextLabel")
+playerListLabel.Size = UDim2.new(0.9, 0, 0.1, 0)
+playerListLabel.Position = UDim2.new(0.05, 0, 0.05, 0)
+playerListLabel.Text = "Select a Player to Teleport"
+playerListLabel.TextColor3 = colorScheme.text
+playerListLabel.Font = Enum.Font.GothamSemibold
+playerListLabel.TextSize = 16
+playerListLabel.BackgroundTransparency = 1
+playerListLabel.Parent = playerSection
+
+local playerScrollFrame = Instance.new("ScrollingFrame")
+playerScrollFrame.Name = "PlayerList"
+playerScrollFrame.Size = UDim2.new(0.9, 0, 0.6, 0)
+playerScrollFrame.Position = UDim2.new(0.05, 0, 0.15, 0)
+playerScrollFrame.CanvasSize = UDim2.new(0, 0, 0, 0)
+playerScrollFrame.BackgroundColor3 = colorScheme.background
+playerScrollFrame.BorderSizePixel = 0
+playerScrollFrame.ScrollBarThickness = 6
+playerScrollFrame.Parent = playerSection
+roundify(playerScrollFrame)
+
+-- Create UIListLayout for properly spacing player buttons
+local listLayout = Instance.new("UIListLayout")
+listLayout.Padding = UDim.new(0, 5)
+listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+listLayout.SortOrder = Enum.SortOrder.Name
+listLayout.Parent = playerScrollFrame
+
+-- Create UIPadding for the scroll frame
+local padding = Instance.new("UIPadding")
+padding.PaddingTop = UDim.new(0, 5)
+padding.PaddingBottom = UDim.new(0, 5)
+padding.PaddingLeft = UDim.new(0, 5)
+padding.PaddingRight = UDim.new(0, 5)
+padding.Parent = playerScrollFrame
+
+local teleportButton = createStyledButton(playerSection, UDim2.new(0.05, 0, 0.8, 0), UDim2.new(0.9, 0, 0.15, 0), "Teleport Selected Player")
+
+-- Function to update player list with proper UI for each player
+local function updatePlayerList()
+    for _, child in pairs(playerScrollFrame:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+    
+    -- Get all players and create buttons for them
+    local buttonHeight = 30
+    local playerList = Players:GetPlayers()
+    
+    -- Update canvas size based on number of players
+    playerScrollFrame.CanvasSize = UDim2.new(0, 0, 0, #playerList * (buttonHeight + listLayout.Padding.Offset) + padding.PaddingTop.Offset + padding.PaddingBottom.Offset)
+    
+    for _, p in pairs(playerList) do
+        local playerButton = Instance.new("TextButton")
+        playerButton.Name = p.Name .. "Button"
+        playerButton.Size = UDim2.new(1, -10, 0, buttonHeight)
+        playerButton.Text = p.Name
+        playerButton.TextColor3 = colorScheme.text
+        playerButton.BackgroundColor3 = colorScheme.playerButton
+        playerButton.Font = Enum.Font.GothamSemibold
+        playerButton.TextSize = 14
+        playerButton.AutoButtonColor = false
+        playerButton.Parent = playerScrollFrame
+        roundify(playerButton)
+        
+        playerButton.MouseButton1Click:Connect(function()
+            selectedPlayerName = p.Name
+            
+            -- Update all buttons to show selection
+            for _, button in pairs(playerScrollFrame:GetChildren()) do
+                if button:IsA("TextButton") then
+                    button.BackgroundColor3 = button.Name == selectedPlayerName .. "Button" 
+                        and colorScheme.playerButtonSelected 
+                        or colorScheme.playerButton
+                end
+            end
+        end)
+    end
+end
+
+-- Connect player events for list updates
+Players.PlayerAdded:Connect(updatePlayerList)
+Players.PlayerRemoving:Connect(updatePlayerList)
+updatePlayerList() -- Initial population
+
+-- Teleport button functionality
+teleportButton.MouseButton1Click:Connect(function()
+    if selectedPlayerName then
+        local targetPlayer = Players:FindFirstChild(selectedPlayerName)
+        if targetPlayer then
+            local success = teleportPlayer(targetPlayer)
+            if success then
+                showStatusMessage(mainFrame, "Teleported " .. targetPlayer.Name .. " successfully!", true)
+            else
+                showStatusMessage(mainFrame, "Failed to teleport " .. targetPlayer.Name, false)
+            end
+        else
+            showStatusMessage(mainFrame, "Player not found!", false)
+        end
+    else
+        showStatusMessage(mainFrame, "No player selected!", false)
+    end
+end)
+
+-- TELEPORT ALL PLAYERS SECTION --
+local teleportAllSection = Instance.new("Frame")
+teleportAllSection.Name = "TeleportAllSection"
+teleportAllSection.Size = UDim2.new(0.9, 0, 0.1, 0)
+teleportAllSection.Position = UDim2.new(0.05, 0, 0.82, 0) -- Position below player section
+teleportAllSection.BackgroundColor3 = colorScheme.scrollBackground
+teleportAllSection.Parent = mainFrame
+roundify(teleportAllSection)
+
+local teleportAllButton = createStyledButton(teleportAllSection, UDim2.new(0.05, 0, 0.2, 0), UDim2.new(0.9, 0, 0.6, 0), "TELEPORT ALL PLAYERS")
+teleportAllButton.BackgroundColor3 = colorScheme.button
+teleportAllButton.TextColor3 = colorScheme.buttonText
+teleportAllButton.Font = Enum.Font.GothamBold
+teleportAllButton.TextSize = 16
+
+teleportAllButton.MouseButton1Click:Connect(function()
+    local successCount, failCount = teleportAllPlayers()
+    
+    if successCount > 0 then
+        showStatusMessage(mainFrame, "Teleported " .. successCount .. " players successfully!" .. (failCount > 0 and " (" .. failCount .. " failed)" or ""), true)
+    else
+        showStatusMessage(mainFrame, "Failed to teleport players", false)
+    end
+end)
+
+-- Initialize walkspeed
+if player.Character and player.Character:FindFirstChild("Humanoid") then
+    currentWsLabel.Text = tostring(player.Character.Humanoid.WalkSpeed)
+end
+
+-- Monitor character changes to keep walkspeed
+player.CharacterAdded:Connect(function(character)
+    local humanoid = character:WaitForChild("Humanoid")
+    local wsText = wsInput.Text
+    local ws = tonumber(wsText)
+    
+    if ws then
+        -- Use a slight delay to ensure the walkspeed applies correctly after character spawn
+        wait(0.5)
+        pcall(function()
+            humanoid.WalkSpeed = ws
+            currentWsLabel.Text = tostring(ws)
+            showStatusMessage(mainFrame, "WalkSpeed restored to " .. ws, true)
+        end)
+    else
+        currentWsLabel.Text = tostring(humanoid.WalkSpeed)
+    end
+end)
+
+-- Start our threads
+spawn(loopTeleportFoodParts)
+spawn(updateWsDisplay)
