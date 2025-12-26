@@ -1,0 +1,340 @@
+local player = game:GetService("Players").LocalPlayer
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+
+local shootRemote = ReplicatedStorage:WaitForChild("ServerEvents"):WaitForChild("Tools"):WaitForChild("Shoot")
+local mouse = player:GetMouse()
+
+-- Settings
+local settings = {
+	hitboxEnabled = false,
+	rapidFireEnabled = false,
+	noSpreadEnabled = false
+}
+
+local isShooting = false
+
+-- Create GUI
+local ScreenGui = Instance.new("ScreenGui")
+local Frame = Instance.new("Frame")
+local Title = Instance.new("TextLabel")
+local HitboxToggle = Instance.new("TextButton")
+local RapidFireToggle = Instance.new("TextButton")
+local NoSpreadToggle = Instance.new("TextButton")
+local CloseButton = Instance.new("TextButton")
+
+ScreenGui.Parent = player:WaitForChild("PlayerGui")
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.ResetOnSpawn = false
+
+Frame.Parent = ScreenGui
+Frame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+Frame.Position = UDim2.new(0.02, 0, 0.3, 0)
+Frame.Size = UDim2.new(0, 250, 0, 200)
+Frame.Active = true
+Frame.Draggable = true
+
+local UICorner = Instance.new("UICorner", Frame)
+UICorner.CornerRadius = UDim.new(0, 10)
+
+Title.Parent = Frame
+Title.BackgroundTransparency = 1
+Title.Position = UDim2.new(0, 0, 0, 0)
+Title.Size = UDim2.new(0.85, 0, 0, 35)
+Title.Font = Enum.Font.GothamBold
+Title.Text = "Combat Menu"
+Title.TextColor3 = Color3.fromRGB(255, 255, 255)
+Title.TextSize = 18
+
+CloseButton.Parent = Frame
+CloseButton.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
+CloseButton.Position = UDim2.new(0.86, 0, 0.05, 0)
+CloseButton.Size = UDim2.new(0, 28, 0, 22)
+CloseButton.Font = Enum.Font.GothamBold
+CloseButton.Text = "X"
+CloseButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseButton.TextSize = 14
+CloseButton.AutoButtonColor = false
+
+local UICorner5 = Instance.new("UICorner", CloseButton)
+UICorner5.CornerRadius = UDim.new(0, 5)
+
+HitboxToggle.Parent = Frame
+HitboxToggle.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
+HitboxToggle.Position = UDim2.new(0.08, 0, 0.25, 0)
+HitboxToggle.Size = UDim2.new(0.84, 0, 0, 40)
+HitboxToggle.Font = Enum.Font.GothamBold
+HitboxToggle.Text = "Hitbox Expander: OFF"
+HitboxToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+HitboxToggle.TextSize = 14
+HitboxToggle.AutoButtonColor = false
+
+local UICorner2 = Instance.new("UICorner", HitboxToggle)
+UICorner2.CornerRadius = UDim.new(0, 8)
+
+RapidFireToggle.Parent = Frame
+RapidFireToggle.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
+RapidFireToggle.Position = UDim2.new(0.08, 0, 0.48, 0)
+RapidFireToggle.Size = UDim2.new(0.84, 0, 0, 40)
+RapidFireToggle.Font = Enum.Font.GothamBold
+RapidFireToggle.Text = "Rapid Fire: OFF"
+RapidFireToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+RapidFireToggle.TextSize = 14
+RapidFireToggle.AutoButtonColor = false
+
+local UICorner3 = Instance.new("UICorner", RapidFireToggle)
+UICorner3.CornerRadius = UDim.new(0, 8)
+
+NoSpreadToggle.Parent = Frame
+NoSpreadToggle.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
+NoSpreadToggle.Position = UDim2.new(0.08, 0, 0.71, 0)
+NoSpreadToggle.Size = UDim2.new(0.84, 0, 0, 40)
+NoSpreadToggle.Font = Enum.Font.GothamBold
+NoSpreadToggle.Text = "No Spread: OFF"
+NoSpreadToggle.TextColor3 = Color3.fromRGB(255, 255, 255)
+NoSpreadToggle.TextSize = 14
+NoSpreadToggle.AutoButtonColor = false
+
+local UICorner4 = Instance.new("UICorner", NoSpreadToggle)
+UICorner4.CornerRadius = UDim.new(0, 8)
+
+-- Function to get equipped tool
+local function getEquippedTool()
+	local character = player.Character
+	if not character then return nil end
+	
+	for _, child in pairs(character:GetChildren()) do
+		if child:IsA("Tool") then
+			return child
+		end
+	end
+	return nil
+end
+
+-- Rapid fire function
+local function rapidShoot()
+	local tool = getEquippedTool()
+	if not tool then return end
+	
+	local stats = tool:FindFirstChild("Statistics")
+	if not stats then return end
+	
+	local character = player.Character
+	local humanoid = character:FindFirstChild("Humanoid")
+	local animator = humanoid and humanoid:FindFirstChild("Animator")
+	
+	if not humanoid or not animator then return end
+	
+	local targetPos = mouse.Hit.Position
+	
+	local args = {
+		{
+			HoldShoot = true,
+			ReadyShoot = true,
+			Tool = tool,
+			Player = player,
+			Character = character,
+			Statistics = stats,
+			Humanoid = humanoid,
+			Animator = animator,
+			Animations = tool:FindFirstChild("Animations"),
+			Camera = workspace.Camera,
+			GameGui = player.PlayerGui:FindFirstChild("GameGui"),
+			HoldMelee = false,
+			HoldReload = false,
+			LoadedAnimations = {},
+			ControlBinds = {}
+		},
+		targetPos,
+		1,
+		{}
+	}
+	
+	pcall(function()
+		shootRemote:FireServer(unpack(args))
+	end)
+end
+
+-- Toggle buttons
+HitboxToggle.MouseButton1Click:Connect(function()
+	settings.hitboxEnabled = not settings.hitboxEnabled
+	if settings.hitboxEnabled then
+		HitboxToggle.Text = "Hitbox Expander: ON"
+		HitboxToggle.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+	else
+		HitboxToggle.Text = "Hitbox Expander: OFF"
+		HitboxToggle.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
+	end
+end)
+
+RapidFireToggle.MouseButton1Click:Connect(function()
+	settings.rapidFireEnabled = not settings.rapidFireEnabled
+	if settings.rapidFireEnabled then
+		RapidFireToggle.Text = "Rapid Fire: ON"
+		RapidFireToggle.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+	else
+		RapidFireToggle.Text = "Rapid Fire: OFF"
+		RapidFireToggle.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
+	end
+end)
+
+NoSpreadToggle.MouseButton1Click:Connect(function()
+	settings.noSpreadEnabled = not settings.noSpreadEnabled
+	if settings.noSpreadEnabled then
+		NoSpreadToggle.Text = "No Spread: ON"
+		NoSpreadToggle.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+	else
+		NoSpreadToggle.Text = "No Spread: OFF"
+		NoSpreadToggle.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
+	end
+end)
+
+CloseButton.MouseButton1Click:Connect(function()
+	ScreenGui:Destroy()
+end)
+
+-- Mouse input for rapid fire
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		isShooting = true
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 then
+		isShooting = false
+	end
+end)
+
+-- Main loop
+RunService.Heartbeat:Connect(function()
+	-- Hitbox expansion
+	if settings.hitboxEnabled then
+		for _, plr in pairs(workspace:GetChildren()) do
+			if plr:IsA("Model") then
+				local head = plr:FindFirstChild("Head")
+				if head and plr.Name ~= player.Name then
+					if not plr:FindFirstChildOfClass("Highlight") then
+						local ESP = Instance.new("Highlight")
+						ESP.FillColor = Color3.fromRGB(255, 0, 0)
+						ESP.OutlineColor = Color3.fromRGB(255, 100, 100)
+						ESP.Parent = plr
+					end
+					
+					if head:IsA("Part") then
+						head.Size = Vector3.new(5, 5, 5)
+						head.Transparency = 0.5
+						head.CanCollide = false
+						
+						local mesh = head:FindFirstChildOfClass("SpecialMesh")
+						if mesh then
+							mesh:Destroy()
+						end
+					end
+				end
+			end
+		end
+		
+		if workspace:FindFirstChild("BotNPCs") then
+			if workspace.BotNPCs:FindFirstChild("Central") then
+				for _, bot in pairs(workspace.BotNPCs.Central:GetChildren()) do
+					if bot:IsA("Model") then
+						local head = bot:FindFirstChild("Head")
+						if head then
+							if not bot:FindFirstChildOfClass("Highlight") then
+								local ESP = Instance.new("Highlight")
+								ESP.FillColor = Color3.fromRGB(0, 255, 0)
+								ESP.OutlineColor = Color3.fromRGB(100, 255, 100)
+								ESP.Parent = bot
+							end
+							
+							if head:IsA("Part") then
+								head.Size = Vector3.new(5, 5, 5)
+								head.Transparency = 0.5
+								head.CanCollide = false
+								
+								local mesh = head:FindFirstChildOfClass("SpecialMesh")
+								if mesh then
+									mesh:Destroy()
+								end
+							end
+						end
+					end
+				end
+			end
+			
+			if workspace.BotNPCs:FindFirstChild("Entente") then
+				for _, bot in pairs(workspace.BotNPCs.Entente:GetChildren()) do
+					if bot:IsA("Model") then
+						local head = bot:FindFirstChild("Head")
+						if head then
+							if not bot:FindFirstChildOfClass("Highlight") then
+								local ESP = Instance.new("Highlight")
+								ESP.FillColor = Color3.fromRGB(0, 255, 0)
+								ESP.OutlineColor = Color3.fromRGB(100, 255, 100)
+								ESP.Parent = bot
+							end
+							
+							if head:IsA("Part") then
+								head.Size = Vector3.new(5, 5, 5)
+								head.Transparency = 0.5
+								head.CanCollide = false
+								
+								local mesh = head:FindFirstChildOfClass("SpecialMesh")
+								if mesh then
+									mesh:Destroy()
+								end
+							end
+						end
+					end
+				end
+			end
+		end
+	end
+	
+	-- No Spread - aggressively set Spread to 0
+	-- Check equipped tool
+	local tool = getEquippedTool()
+	if tool and tool:FindFirstChild("Statistics") then
+		local stats = tool.Statistics
+		
+		-- Set Spread to 0 if no spread is enabled
+		if settings.noSpreadEnabled and stats:FindFirstChild("Spread") then
+			stats.Spread.Value = 0
+		end
+		
+		-- Set ROF to minimum if rapid fire is enabled
+		if settings.rapidFireEnabled and stats:FindFirstChild("ROF") then
+			stats.ROF.Value = 0.01
+		end
+	end
+	
+	-- Also check backpack tools
+	local backpack = player:FindFirstChild("Backpack")
+	if backpack then
+		for _, tool in pairs(backpack:GetChildren()) do
+			if tool:IsA("Tool") and tool:FindFirstChild("Statistics") then
+				local stats = tool.Statistics
+				if settings.noSpreadEnabled and stats:FindFirstChild("Spread") then
+					stats.Spread.Value = 0
+				end
+				if settings.rapidFireEnabled and stats:FindFirstChild("ROF") then
+					stats.ROF.Value = 0.01
+				end
+			end
+		end
+	end
+	
+	-- Rapid fire
+	if settings.rapidFireEnabled and isShooting then
+		rapidShoot()
+	end
+end)
+
+game.StarterGui:SetCore("SendNotification", {
+	Title = "Combat Menu Loaded";
+	Text = "Hitbox, Rapid Fire, No Spread ready!";
+	Duration = 5;
+})
